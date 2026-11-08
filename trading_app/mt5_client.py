@@ -26,13 +26,26 @@ class MT5Connection:
         if mt5 is None:
             raise RuntimeError("MetaTrader5 package is unavailable; install on Windows with the MT5 terminal.")
 
-    def connect(self) -> bool:
+    def connect(self, login: int | None = None, password: str | None = None, server: str | None = None) -> bool:
         self._require_package()
-        if not mt5.initialize():
-            logger.error("MT5 initialize failed: %s", mt5.last_error())
+        # Explicit credentials are supplied only at runtime; never logged or persisted here.
+        if login is not None:
+            mt5.shutdown()
+            initialized = mt5.initialize(login=int(login), password=password or "", server=server or "")
+        else:
+            initialized = mt5.initialize()
+        if not initialized:
+            logger.error("MT5 initialize/login failed: %s", mt5.last_error())
             self.connected = False
             return False
         self.connected = mt5.terminal_info() is not None and mt5.account_info() is not None
+        if login is not None and self.connected:
+            account = mt5.account_info()
+            if int(account.login) != int(login) or (server and account.server != server):
+                logger.error("MT5 connected account does not match selected profile.")
+                mt5.shutdown()
+                self.connected = False
+                return False
         if self.connected:
             self.symbol = self.resolve_symbol(self.config.symbol) or self.config.symbol
         return self.connected
