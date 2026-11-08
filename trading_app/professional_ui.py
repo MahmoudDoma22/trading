@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 from .ui import TradingFrame
 from .theme import PALETTE, apply_dark_theme
 from .signal_sources import fetch_signal_feed
-from .account_profiles import load_profiles, save_profiles, save_password, get_password
+from .account_profiles import load_profiles, save_profiles, save_password, get_password, delete_password
 
 
 PALETTE = {
@@ -75,7 +75,7 @@ class ProfessionalTradingFrame(TradingFrame):
         ttk.Checkbutton(form, text="Save password in Windows Credential Manager (optional)", variable=save_var).grid(row=5, column=1, sticky="w", padx=8, pady=6)
         ttk.Label(form, text="Passwords are never written to the profile file or GitHub.").grid(row=6, column=1, sticky="w", padx=8)
 
-        ttk.Label(win, text="SEARCH SAVED BROKER PROFILES", style="Header.TLabel").pack(anchor="w", padx=18, pady=(12, 3))
+        ttk.Label(win, text="SEARCH SAVED BROKER / ACCOUNT PROFILES", style="Header.TLabel").pack(anchor="w", padx=18, pady=(12, 3))
         search_var = tk.StringVar()
         ttk.Entry(win, textvariable=search_var).pack(fill="x", padx=18)
         tree = ttk.Treeview(win, columns=("broker", "login", "server"), show="headings", height=6)
@@ -162,10 +162,13 @@ class ProfessionalTradingFrame(TradingFrame):
             if not selected:
                 return
             p = profiles[int(selected[0])]
+            if not messagebox.askyesno("Remove saved account", "Remove this saved profile and its stored Windows credential, if present?", parent=win):
+                return
             profiles.remove(p)
             save_profiles(profiles)
+            delete_password(p["broker"], p["login"], p["server"])
             refresh_profiles()
-            status_var.set("Saved profile removed. Stored Windows credential, if any, is unchanged.")
+            status_var.set("Saved profile and its stored Windows credential were removed.")
 
         ttk.Button(buttons, text="Connect account", command=connect_account).pack(side="left")
         ttk.Button(buttons, text="Remove saved profile", command=remove_profile).pack(side="left", padx=8)
