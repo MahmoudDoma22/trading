@@ -86,7 +86,7 @@ class ProfessionalTradingFrame(TradingFrame):
             return
         item = self.external_signals[int(selection[0])]
         self.feed_detail.delete("1.0", "end")
-        self.feed_detail.insert("end", item.get("raw_text", "") + "\\n\\nParsed candidate only — verify source, timestamp, symbol, price and risk independently. No order action is available from this panel.")
+        self.feed_detail.insert("end", item.get("raw_text", "") + "\n\nParsed candidate only — verify source, timestamp, symbol, price and risk independently. No order action is available from this panel.")
 
     def _configure_dark_styles(self):
         style = ttk.Style(self)
