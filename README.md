@@ -1,113 +1,34 @@
-# trading
+# Trading research desktop app
 
-This repository contains an initial desktop trading app prototype for MetaTrader 5 (MT5) with modular strategy bots for XAUUSD and multi-timeframe analysis.
+Windows desktop research dashboard for MetaTrader 5. The app reads closed-bar broker data and presents indicator context and heuristic multi-timeframe scores for XAUUSD. Scores are not win probabilities and do not imply profitability.
 
-## What is included
+## Run (Windows)
 
-- Windows desktop app in Python (Tkinter + Matplotlib)
-- MT5 connector wrapper using `MetaTrader5`
-- Multi-timeframe strategy engine
-- Bot definitions with configurable trade size and risk limits
-- Manual and automatic mode toggle
-- Signal scoring and trade logs
-- Demo / paper-trading friendly defaults
-
-## Important notes
-
-- This is not a guarantee of profitability.
-- Live automated trading is disabled by default.
-- All strategy outputs should be validated on demo accounts first.
-- Risk is controlled with a per-bot max loss and trade-size guardrails.
-
-## Project structure
-
-```text
-trading_app/
-  __init__.py
-  config.py
-  mt5_client.py
-  strategy_engine.py
-  bot_manager.py
-  ui.py
-main.py
-requirements.txt
-README.md
-.gitignore
-```
-
-## Setup on Windows
-
-1. Install Python 3.11+
-2. Create a virtual environment:
+1. Install Python 3.11+ and MetaTrader 5. Open MT5 and log in to a DEMO account for testing.
+2. Create and activate a virtual environment:
 
 ```powershell
 py -m venv .venv
 .venv\Scripts\activate
 ```
 
-3. Install dependencies:
+3. Install and launch:
 
 ```powershell
 pip install -r requirements.txt
-```
-
-4. Start the app:
-
-```powershell
 python main.py
 ```
 
-## MT5 setup
+The app connects to the already-open MT5 terminal; credentials are not collected or stored. Ensure XAUUSD (or your broker's suffixed gold symbol) is visible in Market Watch.
 
-1. Install MetaTrader 5 on your Windows machine.
-2. Ensure your broker account is present and you have the right `login`, `password`, and `server`.
-3. In the app, choose `Connect to MT5` and fill in your broker settings.
-4. Keep automatic trading disabled until your strategy has been backtested and demo validated.
+## Included
 
-## Strategy design
+- MT5 closed-bar feed for M1, M5, M15, H1, H4, D1.
+- Indicator view: RSI, MACD histogram, tick-volume pressure, EMA20/EMA50, and confirmed swing pivots (ZigZag-like context, not a predictive signal).
+- Explainable weighted timeframe scoring; it is a technical alignment heuristic, not a success percentage.
+- Broker-based position sizing through `order_calc_profit` / `order_calc_margin`, with a hard estimated-loss cap of $5 and 10% cost buffer.
+- Manual signals by default; optional automation is restricted in code to verified MT5 demo accounts, asks for confirmation, deduplicates per signal bar, and allows one open position per symbol.
 
-The app includes indicators such as:
+## Safety limitations
 
-- RSI
-- MACD
-- Volume trend
-- EMA/SMA trend filter
-- ZigZag / pivot context
-- Multi-timeframe trend alignment (M1, M5, M15, H1, H4, D1)
-
-The app names the custom indicator layer as:
-
-- `DR Built-in RSI, MACD, Volumes`
-
-## Bot configuration
-
-Each bot can be configured with:
-
-- instrument (`XAUUSD`)
-- direction (`long`, `short`, or both)
-- trade size in lots or USD-equivalent
-- max risk per trade in USD
-- automatic / manual mode
-- confidence score thresholds
-- stop-loss / take-profit rules
-
-## Example bot list
-
-- DR Trend Momentum Bot
-- DR Range Breakout Bot
-- DR Swing Scalper Bot
-- DR Safe Pullback Bot
-
-## Future enhancements
-
-- Multi-chart panel
-- More advanced signal scoring
-- Telegram signal ingestion
-- News calendar integration
-- Market context from EURUSD/XAGUSD
-- Real-time risk engine and order management
-- Backtest results viewer
-
-## License
-
-This project is an initial development scaffold for personal and research use. It is not financial advice.
+The app does not guarantee a maximum realized loss. Gaps, spread, commissions, execution failures, and slippage may cause losses above an estimated cap. Automatic mode can submit demo orders; it is not evidence that a strategy is profitable. Validate with historical out-of-sample data and demo trading before considering any other use. This build blocks automatic orders on real accounts.
