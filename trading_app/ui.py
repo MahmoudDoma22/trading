@@ -42,6 +42,8 @@ class TradingFrame(tk.Frame):
         self.live_armed = False
         self.auto_var = tk.BooleanVar(value=False)
         self._build_ui()
+        if self.bot_manager.load_warning:
+            self._log(self.bot_manager.load_warning)
         self._select_first_bot()
         self.master.protocol("WM_DELETE_WINDOW", self.close_app)
 
@@ -380,7 +382,7 @@ class TradingFrame(tk.Frame):
             stop = entry-distance if direction == "long" else entry+distance
             target = entry+1.5*distance if direction == "long" else entry-1.5*distance
             requested = min(float(self.lots_var.get()), bot.max_trade_size_lots)
-            sizing = self.risk_manager.size_position(symbol, direction, entry, stop, requested, bot.max_trade_size_lots)
+            sizing = self.risk_manager.size_position(symbol, direction, entry, stop, requested, bot.max_trade_size_lots, bot.max_risk_usd)
             if not sizing["ok"]: raise RuntimeError(sizing["reason"])
             is_real = self.mt5.is_real_account()
             warning = f"Submit {direction.upper()} {symbol}, {sizing['volume']} lots?\n\nSL {stop:.{info.digits}f}; TP {target:.{info.digits}f}; buffered risk estimate ${sizing['buffered_loss']:.2f} (cap ${sizing['risk_cap']:.2f}); margin est ${sizing['margin_estimate']:.2f}.\n\nActual loss can exceed estimate. " + ("THIS USES REAL MONEY." if is_real else "Demo account order.")
@@ -419,7 +421,7 @@ class TradingFrame(tk.Frame):
             dist = float(signal.get("stop_distance") or 0)
             if dist <= 0: return
             stop = entry-dist if direction == "long" else entry+dist; target = entry+1.5*dist if direction == "long" else entry-1.5*dist
-            sizing = self.risk_manager.size_position(signal["symbol"], direction, entry, stop, min(float(self.lots_var.get()), bot.max_trade_size_lots), bot.max_trade_size_lots)
+            sizing = self.risk_manager.size_position(signal["symbol"], direction, entry, stop, min(float(self.lots_var.get()), bot.max_trade_size_lots), bot.max_trade_size_lots, bot.max_risk_usd)
             if not sizing["ok"]: self._log(f"Demo risk block: {sizing['reason']}"); self.last_auto_key = key; return
             result = self.mt5.send_approved_order(signal["symbol"], direction, sizing["volume"], round(stop, info.digits), round(target, info.digits), comment=bot.name)
             self._log(f"Demo auto order submitted {result.order}; estimated buffered risk ${sizing['buffered_loss']:.2f}."); self.last_auto_key = key
