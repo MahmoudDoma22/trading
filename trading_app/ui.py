@@ -101,7 +101,7 @@ class TradingFrame(tk.Frame):
         ttk.Button(bar, text="Update chart", command=self.refresh_market).pack(side="left", padx=5)
         self.quote_var = tk.StringVar(value="Bid / Ask —")
         ttk.Label(bar, textvariable=self.quote_var).pack(side="right", padx=8)
-        self.figure = Figure(figsize=(12, 7), dpi=95, facecolor="#f7f8fa")
+        self.figure = Figure(figsize=(12, 7), dpi=95, facecolor="#0B1018")
         grid = self.figure.add_gridspec(4, 1, height_ratios=(3, 1, 1, 1), hspace=.12)
         self.ax_price = self.figure.add_subplot(grid[0])
         self.ax_rsi = self.figure.add_subplot(grid[1], sharex=self.ax_price)
