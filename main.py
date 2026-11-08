@@ -1,4 +1,4 @@
-from trading_app.ui import run_app
+from trading_app.professional_ui import run_app
 
 
 if __name__ == "__main__":
