@@ -31,6 +31,7 @@ class BotManager:
         self.store_path = Path(store_path) if store_path else _default_store_path()
         self.engine = StrategyEngine()
         self.bots: list[BotDefinition] = []
+        self.load_warning = None
         self.load()
 
     def get_bots(self) -> list[BotDefinition]:
@@ -101,8 +102,8 @@ class BotManager:
             except OSError:
                 pass
             self.bots = deepcopy(BOT_LIBRARY)
+            self.load_warning = f"Saved bot library was invalid; defaults were restored. Backup: {backup}. Details: {exc}"
             self.save()
-            raise RuntimeError(f"Could not load saved bots. A backup was attempted at {backup}: {exc}") from exc
 
     def save(self) -> None:
         self.store_path.parent.mkdir(parents=True, exist_ok=True)
