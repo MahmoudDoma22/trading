@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 from .ui import TradingFrame
+from .theme import PALETTE, apply_dark_theme
+from .signal_sources import fetch_signal_feed
 
 
 PALETTE = {
@@ -34,6 +36,57 @@ class ProfessionalTradingFrame(TradingFrame):
         self._add_real_money_warning()
         self._style_text_widgets(self)
         self._style_queue_rows()
+        self._add_signal_hub()
+        apply_dark_theme(self)
+
+
+    def _add_signal_hub(self):
+        tab = ttk.Frame(self.nb, padding=12)
+        self.nb.add(tab, text="Signal Hub")
+        ttk.Label(tab, text="HTTPS RSS / JSON sources — review-only, XAUUSD only", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(tab, text="Use an official feed/API URL you are authorized to access. Never enter third-party passwords here.").pack(anchor="w", pady=(3, 8))
+        row = ttk.Frame(tab)
+        row.pack(fill="x", pady=4)
+        self.feed_url_var = tk.StringVar()
+        ttk.Entry(row, textvariable=self.feed_url_var).pack(side="left", fill="x", expand=True, padx=(0, 8))
+        ttk.Button(row, text="Fetch signals", command=self._fetch_external_signals).pack(side="left")
+        self.feed_status = tk.StringVar(value="No external feed configured. Telegram research remains available.")
+        ttk.Label(tab, textvariable=self.feed_status).pack(anchor="w", pady=5)
+        self.feed_tree = ttk.Treeview(tab, columns=("source", "published", "side", "entry", "stop", "target", "status"), show="headings", height=12)
+        for col, label, width in (("source", "Source", 280), ("published", "Published", 150), ("side", "Direction", 90), ("entry", "Entry", 90), ("stop", "Stop", 90), ("target", "Target", 90), ("status", "Review status", 190)):
+            self.feed_tree.heading(col, text=label)
+            self.feed_tree.column(col, width=width, anchor="center")
+        self.feed_tree.pack(fill="both", expand=True, pady=6)
+        self.feed_detail = tk.Text(tab, height=7, wrap="word")
+        self.feed_detail.pack(fill="x")
+        self.feed_tree.bind("<<TreeviewSelect>>", self._show_external_signal)
+        self.external_signals = []
+
+    def _fetch_external_signals(self):
+        try:
+            items = fetch_signal_feed(self.feed_url_var.get().strip())
+            self.external_signals = items
+            for iid in self.feed_tree.get_children():
+                self.feed_tree.delete(iid)
+            for index, item in enumerate(items):
+                self.feed_tree.insert("", "end", iid=str(index), values=(
+                    item["source"], item.get("published") or "—", item["direction"].upper(),
+                    item.get("entry") or "—", item.get("stop") or "—",
+                    item.get("target") or "—", "UNVERIFIED • REVIEW ONLY"))
+            self.feed_status.set("Received " + str(len(items)) + " candidate(s). None are validated or executable.")
+            if not items:
+                self.feed_status.set("Feed loaded, but no recognizable XAUUSD BUY/SELL candidates were found.")
+        except Exception as exc:
+            self.feed_status.set("Feed fetch failed.")
+            messagebox.showerror("Signal feed error", str(exc), parent=self)
+
+    def _show_external_signal(self, _event=None):
+        selection = self.feed_tree.selection()
+        if not selection:
+            return
+        item = self.external_signals[int(selection[0])]
+        self.feed_detail.delete("1.0", "end")
+        self.feed_detail.insert("end", item.get("raw_text", "") + "\\n\\nParsed candidate only — verify source, timestamp, symbol, price and risk independently. No order action is available from this panel.")
 
     def _configure_dark_styles(self):
         style = ttk.Style(self)
