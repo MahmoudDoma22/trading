@@ -41,44 +41,133 @@ class ProfessionalTradingFrame(TradingFrame):
 
 
     def _add_signal_hub(self):
+        from .signal_source_settings import load_signal_sources, save_signal_sources
+
         tab = ttk.Frame(self.nb, padding=12)
         self.nb.add(tab, text="Signal Hub")
-        ttk.Label(tab, text="HTTPS RSS / JSON sources — review-only, XAUUSD only", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(tab, text="Use an official feed/API URL you are authorized to access. Never enter third-party passwords here.").pack(anchor="w", pady=(3, 8))
-        row = ttk.Frame(tab)
-        row.pack(fill="x", pady=4)
-        self.feed_url_var = tk.StringVar()
-        ttk.Entry(row, textvariable=self.feed_url_var).pack(side="left", fill="x", expand=True, padx=(0, 8))
-        ttk.Button(row, text="Fetch signals", command=self._fetch_external_signals).pack(side="left")
-        self.feed_status = tk.StringVar(value="No external feed configured. Telegram research remains available.")
-        ttk.Label(tab, textvariable=self.feed_status).pack(anchor="w", pady=5)
-        self.feed_tree = ttk.Treeview(tab, columns=("source", "published", "side", "entry", "stop", "target", "status"), show="headings", height=12)
-        for col, label, width in (("source", "Source", 280), ("published", "Published", 150), ("side", "Direction", 90), ("entry", "Entry", 90), ("stop", "Stop", 90), ("target", "Target", 90), ("status", "Review status", 190)):
+        ttk.Label(tab, text="External signal providers — independent settings", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(tab, text="Configure providers now or later. HTTPS RSS/JSON only; candidates are unverified and review-only.").pack(anchor="w", pady=(3, 8))
+
+        settings = ttk.LabelFrame(tab, text="Provider settings (saved locally on this Windows user)", padding=8)
+        settings.pack(fill="x", pady=(0, 8))
+        self.signal_sources = load_signal_sources()
+        self.source_name_var = tk.StringVar()
+        self.source_url_var = tk.StringVar()
+        self.source_enabled_var = tk.BooleanVar(value=True)
+        fields = ttk.Frame(settings)
+        fields.pack(fill="x")
+        ttk.Label(fields, text="Provider name").grid(row=0, column=0, sticky="w")
+        ttk.Entry(fields, textvariable=self.source_name_var, width=24).grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        ttk.Label(fields, text="HTTPS feed/API URL").grid(row=0, column=1, sticky="w")
+        ttk.Entry(fields, textvariable=self.source_url_var).grid(row=1, column=1, sticky="ew", padx=(0, 8))
+        ttk.Checkbutton(fields, text="Enabled", variable=self.source_enabled_var).grid(row=1, column=2, sticky="w")
+        fields.columnconfigure(1, weight=1)
+        actions = ttk.Frame(settings)
+        actions.pack(fill="x", pady=(7, 3))
+        ttk.Button(actions, text="Add / update provider", command=self._save_signal_source).pack(side="left", padx=(0, 6))
+        ttk.Button(actions, text="Remove selected", command=self._remove_signal_source).pack(side="left", padx=(0, 6))
+        ttk.Button(actions, text="Clear fields", command=self._clear_signal_source_fields).pack(side="left")
+        self.source_tree = ttk.Treeview(settings, columns=("name", "url", "enabled"), show="headings", height=3)
+        for col, label, width in (("name", "Provider", 180), ("url", "Feed URL", 600), ("enabled", "Enabled", 80)):
+            self.source_tree.heading(col, text=label)
+            self.source_tree.column(col, width=width, anchor="w")
+        self.source_tree.pack(fill="x", pady=(6, 0))
+        self.source_tree.bind("<<TreeviewSelect>>", self._select_signal_source)
+        self._refresh_signal_source_list()
+
+        fetch_row = ttk.Frame(tab)
+        fetch_row.pack(fill="x", pady=4)
+        ttk.Button(fetch_row, text="Fetch enabled providers", command=self._fetch_external_signals).pack(side="left")
+        self.feed_status = tk.StringVar(value="No providers configured. Add them here whenever you're ready.")
+        ttk.Label(fetch_row, textvariable=self.feed_status).pack(side="left", padx=10)
+        self.feed_tree = ttk.Treeview(tab, columns=("source", "published", "side", "entry", "stop", "target", "status"), show="headings", height=8)
+        for col, label, width in (("source", "Source", 190), ("published", "Published", 140), ("side", "Direction", 80), ("entry", "Entry", 80), ("stop", "Stop", 80), ("target", "Target", 80), ("status", "Review status", 170)):
             self.feed_tree.heading(col, text=label)
             self.feed_tree.column(col, width=width, anchor="center")
         self.feed_tree.pack(fill="both", expand=True, pady=6)
-        self.feed_detail = tk.Text(tab, height=7, wrap="word")
+        self.feed_detail = tk.Text(tab, height=5, wrap="word")
         self.feed_detail.pack(fill="x")
         self.feed_tree.bind("<<TreeviewSelect>>", self._show_external_signal)
         self.external_signals = []
 
+    def _refresh_signal_source_list(self):
+        for iid in self.source_tree.get_children():
+            self.source_tree.delete(iid)
+        for index, source in enumerate(self.signal_sources):
+            self.source_tree.insert("", "end", iid=str(index), values=(source["name"], source["url"], "Yes" if source.get("enabled", True) else "No"))
+
+    def _select_signal_source(self, _event=None):
+        selected = self.source_tree.selection()
+        if not selected:
+            return
+        source = self.signal_sources[int(selected[0])]
+        self.source_name_var.set(source["name"])
+        self.source_url_var.set(source["url"])
+        self.source_enabled_var.set(bool(source.get("enabled", True)))
+
+    def _clear_signal_source_fields(self):
+        self.source_tree.selection_remove(self.source_tree.selection())
+        self.source_name_var.set("")
+        self.source_url_var.set("")
+        self.source_enabled_var.set(True)
+
+    def _save_signal_source(self):
+        name = self.source_name_var.get().strip()
+        url = self.source_url_var.get().strip()
+        if not name or not url.startswith("https://"):
+            messagebox.showwarning("Provider settings", "Enter a provider name and a valid HTTPS URL.", parent=self)
+            return
+        selected = self.source_tree.selection()
+        item = {"name": name[:80], "url": url, "enabled": bool(self.source_enabled_var.get())}
+        if selected:
+            self.signal_sources[int(selected[0])] = item
+        else:
+            self.signal_sources.append(item)
+        save_signal_sources(self.signal_sources)
+        self._refresh_signal_source_list()
+        self._clear_signal_source_fields()
+        self.feed_status.set("Provider settings saved locally. No provider credentials are stored.")
+
+    def _remove_signal_source(self):
+        selected = self.source_tree.selection()
+        if not selected:
+            return
+        del self.signal_sources[int(selected[0])]
+        save_signal_sources(self.signal_sources)
+        self._refresh_signal_source_list()
+        self._clear_signal_source_fields()
+        self.feed_status.set("Selected provider removed from local settings.")
+
     def _fetch_external_signals(self):
-        try:
-            items = fetch_signal_feed(self.feed_url_var.get().strip())
-            self.external_signals = items
-            for iid in self.feed_tree.get_children():
-                self.feed_tree.delete(iid)
-            for index, item in enumerate(items):
-                self.feed_tree.insert("", "end", iid=str(index), values=(
-                    item["source"], item.get("published") or "—", item["direction"].upper(),
-                    item.get("entry") or "—", item.get("stop") or "—",
-                    item.get("target") or "—", "UNVERIFIED • REVIEW ONLY"))
-            self.feed_status.set("Received " + str(len(items)) + " candidate(s). None are validated or executable.")
-            if not items:
-                self.feed_status.set("Feed loaded, but no recognizable XAUUSD BUY/SELL candidates were found.")
-        except Exception as exc:
-            self.feed_status.set("Feed fetch failed.")
-            messagebox.showerror("Signal feed error", str(exc), parent=self)
+        enabled = [source for source in self.signal_sources if source.get("enabled", True)]
+        if not enabled:
+            self.feed_status.set("No enabled providers. Add or enable one in Provider settings.")
+            return
+        items = []
+        errors = []
+        for source in enabled:
+            try:
+                rows = fetch_signal_feed(source["url"])
+                for row in rows:
+                    row["source"] = source["name"]
+                items.extend(rows)
+            except Exception as exc:
+                errors.append(source["name"] + ": " + str(exc))
+        self.external_signals = items
+        for iid in self.feed_tree.get_children():
+            self.feed_tree.delete(iid)
+        for index, item in enumerate(items):
+            self.feed_tree.insert("", "end", iid=str(index), values=(
+                item["source"], item.get("published") or "—", item["direction"].upper(),
+                item.get("entry") if item.get("entry") is not None else "—",
+                item.get("stop") if item.get("stop") is not None else "—",
+                item.get("target") if item.get("target") is not None else "—",
+                "UNVERIFIED • REVIEW ONLY"))
+        self.feed_status.set(str(len(items)) + " candidate(s) received. None are validated or executable.")
+        if errors:
+            messagebox.showwarning("Some providers failed", "\\n".join(errors), parent=self)
+        elif not items:
+            self.feed_status.set("Feeds checked; no recognizable XAUUSD BUY/SELL candidates found.")
 
     def _show_external_signal(self, _event=None):
         selection = self.feed_tree.selection()
