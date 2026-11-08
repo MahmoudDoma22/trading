@@ -34,9 +34,9 @@ class BotManagerDialog(tk.Toplevel):
 
         right = ttk.Frame(self, padding=12)
         right.pack(side="left", fill="both", expand=True)
-        self.vars = {key: tk.StringVar() for key in ("name", "timeframe", "confidence", "risk", "lots", "atr", "description")}
+        self.vars = {key: tk.StringVar() for key in ("name", "timeframe", "timeframes", "confidence", "risk", "lots", "atr", "description")}
         self.enabled_var = tk.BooleanVar(value=True)
-        fields = (("Bot name", "name"), ("Default timeframe", "timeframe"), ("Minimum signal score (0–100)", "confidence"), ("Risk cap per trade (USD, max $5)", "risk"), ("Maximum lots", "lots"), ("Stop distance (ATR multiplier)", "atr"))
+        fields = (("Bot name", "name"), ("Default timeframe", "timeframe"), ("Analysis timeframes (comma separated)", "timeframes"), ("Minimum signal score (0–100)", "confidence"), ("Risk cap per trade (USD, max $5)", "risk"), ("Maximum lots", "lots"), ("Stop distance (ATR multiplier)", "atr"))
         for row, (label, key) in enumerate(fields):
             ttk.Label(right, text=label).grid(row=row, column=0, sticky="w", pady=5)
             if key == "timeframe":
@@ -44,18 +44,18 @@ class BotManagerDialog(tk.Toplevel):
             else:
                 widget = ttk.Entry(right, textvariable=self.vars[key], width=22)
             widget.grid(row=row, column=1, sticky="w", pady=5)
-        ttk.Label(right, text="Description").grid(row=6, column=0, sticky="nw", pady=5)
+        ttk.Label(right, text="Description").grid(row=7, column=0, sticky="nw", pady=5)
         self.description = tk.Text(right, height=5, width=58, wrap="word")
-        self.description.grid(row=6, column=1, sticky="w", pady=5)
-        ttk.Checkbutton(right, text="Enabled for signal analysis", variable=self.enabled_var).grid(row=7, column=1, sticky="w", pady=5)
-        ttk.Label(right, text="XAUUSD only • $5 maximum risk cap • strategy score is not win probability", foreground="#9b5b00").grid(row=8, column=0, columnspan=2, sticky="w", pady=8)
+        self.description.grid(row=7, column=1, sticky="w", pady=5)
+        ttk.Checkbutton(right, text="Enabled for signal analysis", variable=self.enabled_var).grid(row=8, column=1, sticky="w", pady=5)
+        ttk.Label(right, text="XAUUSD only • $5 maximum risk cap • strategy score is not win probability", foreground="#9b5b00").grid(row=9, column=0, columnspan=2, sticky="w", pady=8)
 
         actions = ttk.Frame(right)
-        actions.grid(row=9, column=0, columnspan=2, sticky="ew", pady=8)
+        actions.grid(row=10, column=0, columnspan=2, sticky="ew", pady=8)
         for label, command in (("New bot", self._new), ("Save changes", self._save), ("Duplicate", self._duplicate), ("Delete", self._delete), ("Enable / disable", self._toggle)):
             ttk.Button(actions, text=label, command=command).pack(side="left", padx=3)
         files = ttk.Frame(right)
-        files.grid(row=10, column=0, columnspan=2, sticky="w", pady=8)
+        files.grid(row=11, column=0, columnspan=2, sticky="w", pady=8)
         ttk.Button(files, text="Import bots…", command=self._import).pack(side="left", padx=3)
         ttk.Button(files, text="Export bots…", command=self._export).pack(side="left", padx=3)
         ttk.Button(files, text="Restore defaults", command=self._reset).pack(side="left", padx=3)
@@ -91,6 +91,7 @@ class BotManagerDialog(tk.Toplevel):
             return
         self.selected_name = bot.name
         for key, value in (("name", bot.name), ("timeframe", bot.default_timeframe),
+                           ("timeframes", ",".join(bot.settings.get("timeframes", [bot.default_timeframe]))),
                            ("confidence", bot.min_confidence), ("risk", bot.max_risk_usd),
                            ("lots", bot.max_trade_size_lots), ("atr", bot.settings.get("stop_atr_multiplier", 1.5))):
             self.vars[key].set(str(value))
@@ -99,6 +100,9 @@ class BotManagerDialog(tk.Toplevel):
         self.enabled_var.set(self.manager.is_enabled(bot))
 
     def _read_form(self):
+        timeframes = [item.strip().upper() for item in self.vars["timeframes"].get().split(",") if item.strip()]
+        if not timeframes or any(item not in TIMEFRAMES for item in timeframes):
+            raise ValueError("Analysis timeframes must be selected from M1, M5, M15, H1, H4, D1.")
         return BotDefinition(
             name=self.vars["name"].get().strip(),
             description=self.description.get("1.0", "end").strip(),
@@ -108,7 +112,7 @@ class BotManagerDialog(tk.Toplevel):
             max_risk_usd=float(self.vars["risk"].get()),
             max_trade_size_lots=float(self.vars["lots"].get()),
             auto_trade_enabled=False,
-            settings={"timeframes": [self.vars["timeframe"].get().strip()],
+            settings={"timeframes": list(dict.fromkeys(timeframes)),
                       "stop_atr_multiplier": float(self.vars["atr"].get()),
                       "enabled": self.enabled_var.get()},
         )
@@ -130,7 +134,7 @@ class BotManagerDialog(tk.Toplevel):
 
     def _new(self):
         self.selected_name = None
-        for key, value in (("name", "New XAUUSD Bot"), ("timeframe", "M15"), ("confidence", "20"), ("risk", "5"), ("lots", "0.01"), ("atr", "1.5")):
+        for key, value in (("name", "New XAUUSD Bot"), ("timeframe", "M15"), ("timeframes", "M5,M15,H1"), ("confidence", "20"), ("risk", "5"), ("lots", "0.01"), ("atr", "1.5")):
             self.vars[key].set(value)
         self.description.delete("1.0", "end")
         self.description.insert("1.0", "Describe the strategy and its entry conditions.")
