@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .config import BotDefinition
 from .strategy_engine import TIMEFRAMES
+from .theme import apply_dark_theme
 
 
 class BotManagerDialog(tk.Toplevel):
@@ -61,6 +62,7 @@ class BotManagerDialog(tk.Toplevel):
         ttk.Button(files, text="Restore defaults", command=self._reset).pack(side="left", padx=3)
         self.selected_name = None
         self._refresh()
+        apply_dark_theme(self)
 
     def _refresh(self, select_name=None):
         for iid in self.tree.get_children():
