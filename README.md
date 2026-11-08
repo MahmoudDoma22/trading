@@ -45,6 +45,17 @@ Bot configurations are stored in the current Windows user's application data dir
 - Historical backtest with CSV export; simulation outcomes are not forecasts.
 - Telegram Desktop JSON export import and Bot API polling for authorized new channel posts. Telegram posts remain unverified, require review, and are never automatically sent to the order engine.
 
+
+## Signal Hub and external providers
+
+The Signal Hub accepts provider HTTPS RSS/Atom feeds and JSON endpoints. It extracts candidate XAUUSD BUY/SELL messages into a separate review-only list. Feeds must be public or otherwise authorized and use HTTPS; the current adapter has an 8-second timeout and 1 MB response limit. This is a generic feed adapter, not a certified integration with any particular signal vendor. Provider-specific authentication, paid API schemas, webhooks, rate limits, and licensing must be implemented and tested against official provider documentation. Telegram research import/polling remains available separately.
+
+External messages are unverified and never routed to the order queue or execution engine. Verify provider identity, timestamp, symbol, price, stop, target, and market conditions independently. Do not paste provider passwords, API secrets, or account credentials into the feed URL.
+
+## Appearance
+
+The app applies a shared dark palette to ttk controls, classic Tk text/entry widgets, tables, and the Bot Manager dialog. The Market tab includes compact instrument/signal/score/quote cards, and charts use a matching dark canvas.
+
 ## Live order and emergency controls
 
 Demo automatic execution is optional and requires a verified MT5 demo account. Live mode is **manual approval only**: the separate real-orders control displays a risk warning and requires two confirmations; every queued order requires an additional per-order confirmation and broker-based sizing check. Live automatic trading is deliberately disabled.
