@@ -40,6 +40,7 @@ class ProfessionalTradingFrame(TradingFrame):
         self._style_text_widgets(self)
         self._style_queue_rows()
         self._add_signal_hub()
+        self._add_manual_trading_tab()
         apply_dark_theme(self)
 
 
@@ -174,6 +175,141 @@ class ProfessionalTradingFrame(TradingFrame):
         ttk.Button(buttons, text="Connect account", command=connect_account).pack(side="left")
         ttk.Button(buttons, text="Remove saved profile", command=remove_profile).pack(side="left", padx=8)
         ttk.Button(buttons, text="Close", command=win.destroy).pack(side="right")
+
+
+    def _add_manual_trading_tab(self):
+        tab = ttk.Frame(self.nb, padding=14)
+        self.nb.add(tab, text="Manual Trading")
+        ttk.Label(tab, text="MANUAL ORDER TICKET", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(tab, text="Gold only • fresh MT5 quote • $5 estimated risk cap • every order requires confirmation.").pack(anchor="w", pady=(3, 10))
+        ticket = ttk.LabelFrame(tab, text="Buy / Sell", padding=12)
+        ticket.pack(fill="x", pady=(0, 12))
+        self.manual_lots_var = tk.StringVar(value="0.01")
+        self.manual_sl_var = tk.StringVar()
+        self.manual_tp_var = tk.StringVar()
+        for col, (label, var) in enumerate((("Volume (lots)", self.manual_lots_var), ("Stop Loss price", self.manual_sl_var), ("Take Profit price", self.manual_tp_var))):
+            ttk.Label(ticket, text=label).grid(row=0, column=col, sticky="w", padx=5)
+            ttk.Entry(ticket, textvariable=var, width=18).grid(row=1, column=col, sticky="ew", padx=5, pady=5)
+        for col in range(3):
+            ticket.columnconfigure(col, weight=1)
+        ttk.Button(ticket, text="BUY XAUUSD", style="Approve.TButton", command=lambda: self.submit_manual_order("long")).grid(row=2, column=0, sticky="ew", padx=5, pady=(8, 0))
+        ttk.Button(ticket, text="SELL XAUUSD", style="Reject.TButton", command=lambda: self.submit_manual_order("short")).grid(row=2, column=1, sticky="ew", padx=5, pady=(8, 0))
+        ttk.Button(ticket, text="Refresh positions", command=self.refresh_manual_positions).grid(row=2, column=2, sticky="ew", padx=5, pady=(8, 0))
+        positions = ttk.LabelFrame(tab, text="Open positions managed by this app", padding=10)
+        positions.pack(fill="both", expand=True)
+        self.manual_positions_tree = ttk.Treeview(positions, columns=("ticket", "symbol", "side", "volume", "open", "sl", "tp", "profit"), show="headings", height=9)
+        for col, label, width in (("ticket", "Ticket", 100), ("symbol", "Symbol", 100), ("side", "Side", 80), ("volume", "Lots", 80), ("open", "Open price", 110), ("sl", "Stop Loss", 110), ("tp", "Take Profit", 110), ("profit", "P/L", 100)):
+            self.manual_positions_tree.heading(col, text=label)
+            self.manual_positions_tree.column(col, width=width, anchor="center")
+        self.manual_positions_tree.pack(fill="both", expand=True)
+        self.manual_positions_tree.bind("<<TreeviewSelect>>", self._select_manual_position)
+        modify = ttk.Frame(positions)
+        modify.pack(fill="x", pady=8)
+        self.position_sl_var = tk.StringVar()
+        self.position_tp_var = tk.StringVar()
+        ttk.Label(modify, text="New SL").pack(side="left")
+        ttk.Entry(modify, textvariable=self.position_sl_var, width=14).pack(side="left", padx=5)
+        ttk.Label(modify, text="New TP").pack(side="left")
+        ttk.Entry(modify, textvariable=self.position_tp_var, width=14).pack(side="left", padx=5)
+        ttk.Button(modify, text="Modify SL / TP", command=self.modify_selected_position).pack(side="left", padx=8)
+        ttk.Button(modify, text="Close selected position", command=self.close_selected_position).pack(side="left")
+        self.manual_status = tk.StringVar(value="Connect to an MT5 account to use manual trading.")
+        ttk.Label(tab, textvariable=self.manual_status).pack(anchor="w", pady=(8, 0))
+
+    def submit_manual_order(self, direction: str):
+        if not self.mt5.connected:
+            messagebox.showwarning("Not connected", "Connect to an MT5 account first.")
+            return
+        try:
+            if not self.mt5.is_demo_account() and not (self.live_armed and self.mt5.is_real_account()):
+                raise RuntimeError("Live orders are disarmed. Arm manual live orders first; automatic live trading is disabled.")
+            symbol = self.mt5.symbol
+            info = self.mt5.get_symbol_info(symbol)
+            tick = self.mt5.get_tick(symbol)
+            if info is None or tick is None:
+                raise RuntimeError("Gold symbol or current broker quote is unavailable.")
+            entry = tick.ask if direction == "long" else tick.bid
+            stop = float(self.manual_sl_var.get())
+            target = float(self.manual_tp_var.get())
+            requested = float(self.manual_lots_var.get())
+            if requested <= 0:
+                raise ValueError("Volume must be greater than zero.")
+            if direction == "long" and not (stop < entry < target):
+                raise ValueError("For BUY, Stop Loss must be below current Ask and Take Profit above it.")
+            if direction == "short" and not (target < entry < stop):
+                raise ValueError("For SELL, Take Profit must be below current Bid and Stop Loss above it.")
+            sizing = self.risk_manager.size_position(symbol, direction, entry, stop, requested, requested, self.config.max_risk_usd)
+            if not sizing["ok"]:
+                raise RuntimeError(sizing["reason"])
+            real = self.mt5.is_real_account()
+            warning = f"{direction.upper()} {symbol} at current quote {entry:.{info.digits}f}\\nVolume: {sizing['volume']} lots\\nSL: {stop}\\nTP: {target}\\nEstimated buffered risk: USD {sizing['buffered_loss']:.2f} (cap USD {sizing['risk_cap']:.2f})\\n\\nActual loss may exceed this estimate. " + ("REAL MONEY ORDER." if real else "Demo account order.")
+            if not messagebox.askyesno("Confirm manual order", warning, icon="warning"):
+                return
+            result = self.mt5.send_approved_order(symbol, direction, sizing["volume"], round(stop, info.digits), round(target, info.digits), allow_real=bool(real and self.live_armed), comment="Manual ticket")
+            self.manual_status.set(f"Order accepted by broker. Ticket #{result.order}.")
+            self._log(f"Manual {direction.upper()} submitted: ticket {result.order}, {sizing['volume']} lots.")
+            self.refresh_manual_positions()
+        except Exception as exc:
+            self.manual_status.set("Order blocked or failed.")
+            messagebox.showerror("Manual order not submitted", str(exc), parent=self)
+
+    def refresh_manual_positions(self):
+        if not self.mt5.connected:
+            self.manual_status.set("Connect to MT5 first.")
+            return
+        for iid in self.manual_positions_tree.get_children():
+            self.manual_positions_tree.delete(iid)
+        try:
+            positions = self.mt5.get_app_positions()
+            for position in positions:
+                side = "BUY" if position.type == 0 else "SELL"
+                self.manual_positions_tree.insert("", "end", iid=str(position.ticket), values=(
+                    position.ticket, position.symbol, side, position.volume,
+                    position.price_open, position.sl, position.tp, position.profit))
+            self.manual_status.set(f"{len(positions)} app-managed open position(s). Unrelated MT5 positions are intentionally excluded.")
+        except Exception as exc:
+            self.manual_status.set("Could not refresh positions: " + str(exc))
+
+    def _select_manual_position(self, _event=None):
+        selected = self.manual_positions_tree.selection()
+        if not selected:
+            return
+        values = self.manual_positions_tree.item(selected[0], "values")
+        self.position_sl_var.set(str(values[5]))
+        self.position_tp_var.set(str(values[6]))
+
+    def close_selected_position(self):
+        selected = self.manual_positions_tree.selection()
+        if not selected:
+            messagebox.showinfo("Select a position", "Select an app-managed position first.")
+            return
+        ticket = int(selected[0])
+        if not messagebox.askyesno("Confirm close", f"Close app-managed position #{ticket}? Check the current quote and result in MT5.", icon="warning"):
+            return
+        try:
+            self.mt5.close_app_position(ticket)
+            self.manual_status.set(f"Close request accepted for position #{ticket}.")
+            self._log(f"Manual close submitted for app-managed position #{ticket}.")
+            self.refresh_manual_positions()
+        except Exception as exc:
+            messagebox.showerror("Close failed", str(exc), parent=self)
+
+    def modify_selected_position(self):
+        selected = self.manual_positions_tree.selection()
+        if not selected:
+            messagebox.showinfo("Select a position", "Select an app-managed position first.")
+            return
+        ticket = int(selected[0])
+        try:
+            sl, tp = float(self.position_sl_var.get()), float(self.position_tp_var.get())
+            if not messagebox.askyesno("Confirm SL / TP change", f"Modify position #{ticket}?\\nNew SL: {sl}\\nNew TP: {tp}", icon="warning"):
+                return
+            self.mt5.modify_app_position(ticket, sl, tp)
+            self.manual_status.set(f"Stop Loss / Take Profit updated for #{ticket}.")
+            self._log(f"SL/TP modification submitted for app-managed position #{ticket}.")
+            self.refresh_manual_positions()
+        except Exception as exc:
+            messagebox.showerror("Modify failed", str(exc), parent=self)
 
     def _add_signal_hub(self):
         from .signal_source_settings import load_signal_sources, save_signal_sources
