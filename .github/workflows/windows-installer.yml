@@ -1,0 +1,47 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches: [main, feature/xauusd-bot-manager-installer]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Compile Python modules
+        shell: pwsh
+        run: |
+          python -m compileall -q main.py trading_app tests
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Build standalone application
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name DRTradingTerminal --collect-all MetaTrader5 --collect-all keyring main.py
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\DRTradingTerminal.iss'
+      - name: Upload Windows EXE and installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRTradingTerminal-Windows
+          path: |
+            dist/DRTradingTerminal.exe
+            installer/output/DRTradingTerminal-Setup.exe
+          if-no-files-found: error

@@ -10,6 +10,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from .backtest import Backtester
+from .bot_manager_dialog import BotManagerDialog
 from .bot_manager import BotManager
 from .config import MqlConfig
 from .mt5_client import MT5Connection
@@ -19,7 +20,7 @@ from .strategy_journal import StrategyJournal
 from .telegram_ingest import CHANNEL_LINK, parse_telegram_export, poll_authorized_channel_updates
 
 logger = logging.getLogger(__name__)
-SYMBOL_PRESETS = ("XAUUSD", "XAGUSD", "EURUSD", "GBPUSD")
+SYMBOL_PRESETS = ("XAUUSD",)
 
 
 class TradingFrame(tk.Frame):
@@ -41,6 +42,8 @@ class TradingFrame(tk.Frame):
         self.live_armed = False
         self.auto_var = tk.BooleanVar(value=False)
         self._build_ui()
+        if self.bot_manager.load_warning:
+            self._log(self.bot_manager.load_warning)
         self._select_first_bot()
         self.master.protocol("WM_DELETE_WINDOW", self.close_app)
 
@@ -57,6 +60,7 @@ class TradingFrame(tk.Frame):
         ttk.Label(header, text="DR TERMINAL  |  Research / execution", style="Header.TLabel").pack(side="left", padx=5)
         ttk.Button(header, text="Connect MT5", command=self.connect_mt5).pack(side="left", padx=8)
         ttk.Button(header, text="Refresh", command=self.refresh_market).pack(side="left", padx=4)
+        ttk.Button(header, text="Manage bots", command=self.open_bot_manager).pack(side="left", padx=4)
         self.connection_var = tk.StringVar(value="Disconnected")
         ttk.Label(header, textvariable=self.connection_var).pack(side="left", padx=10)
         ttk.Button(header, text="Enable REAL orders…", command=self.enable_live).pack(side="right", padx=5)
@@ -117,6 +121,7 @@ class TradingFrame(tk.Frame):
         for bot in self.bot_manager.get_bots():
             self.bot_tree.insert("", "end", text=bot.name)
         self.bot_tree.bind("<<TreeviewSelect>>", self.on_bot_selected)
+        ttk.Button(left, text="Load / manage bots…", command=self.open_bot_manager).pack(fill="x", pady=5)
         right = ttk.Frame(parent, padding=8)
         right.pack(side="left", fill="both", expand=True)
         editor = ttk.LabelFrame(right, text="Selected bot configuration", padding=8)
@@ -202,9 +207,25 @@ class TradingFrame(tk.Frame):
         if hasattr(self, "log"):
             self.log.insert("end", f"{time.strftime('%H:%M:%S')}  {text}\n"); self.log.see("end")
 
+    def open_bot_manager(self):
+        BotManagerDialog(self, self.bot_manager, on_change=self._on_bot_library_changed)
+
+    def _on_bot_library_changed(self, preferred_name=None):
+        for iid in self.bot_tree.get_children():
+            self.bot_tree.delete(iid)
+        for bot in self.bot_manager.get_bots():
+            label = bot.name if self.bot_manager.is_enabled(bot) else f"{bot.name} [DISABLED]"
+            self.bot_tree.insert("", "end", text=label)
+        if preferred_name:
+            for iid in self.bot_tree.get_children():
+                if self.bot_tree.item(iid, "text").replace(" [DISABLED]", "") == preferred_name:
+                    self.bot_tree.selection_set(iid)
+                    self.on_bot_selected(None)
+                    break
+
     def _selected_bot(self):
         selection = self.bot_tree.selection()
-        name = self.bot_tree.item(selection[0], "text") if selection else None
+        name = self.bot_tree.item(selection[0], "text").replace(" [DISABLED]", "") if selection else None
         return next((b for b in self.bot_manager.get_bots() if b.name == name), None)
 
     def _select_first_bot(self):
@@ -268,6 +289,9 @@ class TradingFrame(tk.Frame):
             self.signal_var.set("No feed. Connect to MT5; sample prices are not used."); return
         bot = self._selected_bot()
         if not bot: return
+        if not self.bot_manager.is_enabled(bot):
+            self.signal_var.set(f"{bot.name} is disabled. Enable it in Manage bots to resume analysis.")
+            return
         try:
             symbol, data = self.mt5.get_market_data(self.symbol_var.get(), TIMEFRAMES, self.config.candle_count)
             self.market_data = data
@@ -358,7 +382,7 @@ class TradingFrame(tk.Frame):
             stop = entry-distance if direction == "long" else entry+distance
             target = entry+1.5*distance if direction == "long" else entry-1.5*distance
             requested = min(float(self.lots_var.get()), bot.max_trade_size_lots)
-            sizing = self.risk_manager.size_position(symbol, direction, entry, stop, requested, bot.max_trade_size_lots)
+            sizing = self.risk_manager.size_position(symbol, direction, entry, stop, requested, bot.max_trade_size_lots, bot.max_risk_usd)
             if not sizing["ok"]: raise RuntimeError(sizing["reason"])
             is_real = self.mt5.is_real_account()
             warning = f"Submit {direction.upper()} {symbol}, {sizing['volume']} lots?\n\nSL {stop:.{info.digits}f}; TP {target:.{info.digits}f}; buffered risk estimate ${sizing['buffered_loss']:.2f} (cap ${sizing['risk_cap']:.2f}); margin est ${sizing['margin_estimate']:.2f}.\n\nActual loss can exceed estimate. " + ("THIS USES REAL MONEY." if is_real else "Demo account order.")
@@ -397,7 +421,7 @@ class TradingFrame(tk.Frame):
             dist = float(signal.get("stop_distance") or 0)
             if dist <= 0: return
             stop = entry-dist if direction == "long" else entry+dist; target = entry+1.5*dist if direction == "long" else entry-1.5*dist
-            sizing = self.risk_manager.size_position(signal["symbol"], direction, entry, stop, min(float(self.lots_var.get()), bot.max_trade_size_lots), bot.max_trade_size_lots)
+            sizing = self.risk_manager.size_position(signal["symbol"], direction, entry, stop, min(float(self.lots_var.get()), bot.max_trade_size_lots), bot.max_trade_size_lots, bot.max_risk_usd)
             if not sizing["ok"]: self._log(f"Demo risk block: {sizing['reason']}"); self.last_auto_key = key; return
             result = self.mt5.send_approved_order(signal["symbol"], direction, sizing["volume"], round(stop, info.digits), round(target, info.digits), comment=bot.name)
             self._log(f"Demo auto order submitted {result.order}; estimated buffered risk ${sizing['buffered_loss']:.2f}."); self.last_auto_key = key

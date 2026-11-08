@@ -26,13 +26,26 @@ class MT5Connection:
         if mt5 is None:
             raise RuntimeError("MetaTrader5 package is unavailable; install on Windows with the MT5 terminal.")
 
-    def connect(self) -> bool:
+    def connect(self, login: int | None = None, password: str | None = None, server: str | None = None) -> bool:
         self._require_package()
-        if not mt5.initialize():
-            logger.error("MT5 initialize failed: %s", mt5.last_error())
+        # Explicit credentials are supplied only at runtime; never logged or persisted here.
+        if login is not None:
+            mt5.shutdown()
+            initialized = mt5.initialize(login=int(login), password=password or "", server=server or "")
+        else:
+            initialized = mt5.initialize()
+        if not initialized:
+            logger.error("MT5 initialize/login failed: %s", mt5.last_error())
             self.connected = False
             return False
         self.connected = mt5.terminal_info() is not None and mt5.account_info() is not None
+        if login is not None and self.connected:
+            account = mt5.account_info()
+            if int(account.login) != int(login) or (server and account.server != server):
+                logger.error("MT5 connected account does not match selected profile.")
+                mt5.shutdown()
+                self.connected = False
+                return False
         if self.connected:
             self.symbol = self.resolve_symbol(self.config.symbol) or self.config.symbol
         return self.connected
@@ -106,6 +119,26 @@ class MT5Connection:
         self._ensure_connected()
         return mt5.order_calc_margin(order_type, symbol, volume, price)
 
+
+    def _order_send_with_fill_fallback(self, request: dict):
+        """Retry only an explicit INVALID_FILL response; never retry ambiguous outcomes."""
+        modes = []
+        for name in ("ORDER_FILLING_IOC", "ORDER_FILLING_FOK", "ORDER_FILLING_RETURN"):
+            mode = getattr(mt5, name, None)
+            if mode is not None and mode not in modes:
+                modes.append(mode)
+        if not modes:
+            return mt5.order_send(request)
+        last_result = None
+        for mode in modes:
+            request["type_filling"] = mode
+            last_result = mt5.order_send(request)
+            if last_result is not None and last_result.retcode == mt5.TRADE_RETCODE_DONE:
+                return last_result
+            if last_result is None or last_result.retcode != getattr(mt5, "TRADE_RETCODE_INVALID_FILL", -1):
+                return last_result
+        return last_result
+
     def send_approved_order(self, symbol: str, direction: str, volume: float, stop_loss: float, take_profit: float, allow_real: bool = False, comment: str = "Human-approved signal"):
         """Send only after an explicit UI approval; live mode must be separately armed."""
         self._ensure_connected()
@@ -131,9 +164,55 @@ class MT5Connection:
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
-        result = mt5.order_send(request)
+        result = self._order_send_with_fill_fallback(request)
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             raise RuntimeError(f"Order rejected: {getattr(result, 'comment', mt5.last_error())}")
+        return result
+
+
+    def get_app_positions(self) -> list:
+        self._ensure_connected()
+        return [p for p in (mt5.positions_get() or ()) if int(getattr(p, "magic", -1)) == APP_MAGIC]
+
+    def close_app_position(self, ticket: int):
+        self._ensure_connected()
+        position = next((p for p in self.get_app_positions() if int(p.ticket) == int(ticket)), None)
+        if position is None:
+            raise RuntimeError("Position not found or it is not tagged as an app-managed trade.")
+        tick = mt5.symbol_info_tick(position.symbol)
+        if tick is None:
+            raise RuntimeError("No current quote is available for this position.")
+        close_buy = position.type == mt5.POSITION_TYPE_SELL
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL, "symbol": position.symbol,
+            "position": position.ticket, "volume": position.volume,
+            "type": mt5.ORDER_TYPE_BUY if close_buy else mt5.ORDER_TYPE_SELL,
+            "price": tick.ask if close_buy else tick.bid, "deviation": 50,
+            "magic": APP_MAGIC, "comment": "Manual close from DR Terminal",
+            "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = self._order_send_with_fill_fallback(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise RuntimeError(f"Position close rejected: {getattr(result, 'comment', mt5.last_error())}")
+        return result
+
+    def modify_app_position(self, ticket: int, stop_loss: float, take_profit: float):
+        self._ensure_connected()
+        position = next((p for p in self.get_app_positions() if int(p.ticket) == int(ticket)), None)
+        if position is None:
+            raise RuntimeError("Position not found or it is not tagged as an app-managed trade.")
+        info = mt5.symbol_info(position.symbol)
+        if info is None:
+            raise RuntimeError("Symbol specification is unavailable.")
+        sl = round(float(stop_loss), info.digits) if stop_loss else 0.0
+        tp = round(float(take_profit), info.digits) if take_profit else 0.0
+        if sl <= 0 or tp <= 0:
+            raise ValueError("Both a positive Stop Loss and Take Profit are required.")
+        request = {"action": mt5.TRADE_ACTION_SLTP, "position": position.ticket,
+                   "symbol": position.symbol, "sl": sl, "tp": tp, "magic": APP_MAGIC}
+        result = mt5.order_send(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise RuntimeError(f"Stop/target modification rejected: {getattr(result, 'comment', mt5.last_error())}")
         return result
 
     def emergency_stop_app_trades(self) -> dict:
@@ -161,7 +240,7 @@ class MT5Connection:
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": mt5.ORDER_FILLING_IOC,
             }
-            result = mt5.order_send(request)
+            result = self._order_send_with_fill_fallback(request)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
                 closed.append(int(position.ticket))
             else:
