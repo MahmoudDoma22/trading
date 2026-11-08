@@ -158,7 +158,7 @@ class BotManager:
             clone.name = f"{source.name} Copy {suffix}"
             suffix += 1
         self.add_bot(clone)
-        return clone
+        return next(bot for bot in self.bots if bot.name == clone.name)
 
     def set_enabled(self, name: str, enabled: bool) -> None:
         bot = next((item for item in self.bots if item.name == name), None)
