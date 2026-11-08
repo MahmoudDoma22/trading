@@ -33,7 +33,7 @@ class ProfessionalTradingFrame(TradingFrame):
         self.configure(background=PALETTE["window"])
         self._configure_dark_styles()
         header = self.winfo_children()[0]
-        ttk.Button(header, text='Login / Accounts', command=self.open_account_login).pack(side='left', padx=6)
+        ttk.Button(header, text="BROKER LOGIN", command=self.open_account_login).pack(side="left", padx=6)
         self._add_market_cards()
         self._add_order_ticket()
         self._add_real_money_warning()
@@ -57,7 +57,7 @@ class ProfessionalTradingFrame(TradingFrame):
         win.geometry("820x700")
         win.minsize(740, 640)
         win.configure(background=PALETTE["window"])
-        win.transient(self.master)
+        # Root is intentionally hidden until login; do not make this dialog transient to it.
         win.grab_set()
         apply_dark_theme(win)
         profiles = load_profiles()
