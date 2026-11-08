@@ -24,7 +24,7 @@ def parse_signal_payload(payload, source: str) -> list[dict]:
         for item in items:
             if isinstance(item,str): text,published=item,""
             elif isinstance(item,dict):
-                text=" ".join(str(item.get(k,"")) for k in ("text","message","description","signal","title","direction","side","symbol","entry","stop","sl","target","tp"))
+                text=" ".join([str(item.get(k,"")) for k in ("text","message","description","signal","title","direction","side","symbol")] + (["ENTRY " + str(item.get("entry"))] if item.get("entry") is not None else []) + (["SL " + str(item.get("stop", item.get("sl")))] if item.get("stop", item.get("sl")) is not None else []) + (["TP " + str(item.get("target", item.get("tp")))] if item.get("target", item.get("tp")) is not None else []))
                 published=str(item.get("published",item.get("date",item.get("time",""))))
             else: continue
             row=_candidate(text,source,published)
