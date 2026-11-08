@@ -10,18 +10,18 @@ from .account_profiles import load_profiles, save_profiles, save_password, get_p
 
 
 PALETTE = {
-    "window": "#10151d",
-    "panel": "#18212c",
-    "panel_alt": "#202b38",
-    "text": "#e6edf3",
-    "muted": "#9aa9b8",
-    "border": "#334155",
-    "green": "#12b886",
-    "green_dark": "#14372f",
-    "red": "#ff5b61",
-    "red_dark": "#402329",
-    "amber": "#f0b429",
-    "blue": "#5aa9ff",
+    "window": "#0B1018",
+    "panel": "#121C2A",
+    "panel_alt": "#1A2A3C",
+    "text": "#F1F5F9",
+    "muted": "#A8B5C5",
+    "border": "#2A3B50",
+    "green": "#2BC48A",
+    "green_dark": "#12372F",
+    "red": "#F06B72",
+    "red_dark": "#3B2028",
+    "amber": "#E3B45B",
+    "blue": "#7DB7FF",
 }
 
 
@@ -46,19 +46,31 @@ class ProfessionalTradingFrame(TradingFrame):
 
 
     def open_account_login(self):
-        win = tk.Toplevel(self)
-        win.title("Broker & MT5 account login")
-        win.geometry("720x620")
-        win.transient(self)
+        if getattr(self, "login_window", None) is not None and self.login_window.winfo_exists():
+            self.login_window.deiconify()
+            self.login_window.lift()
+            self.login_window.focus_force()
+            return
+        win = tk.Toplevel(self.master)
+        self.login_window = win
+        win.title("DR Trading Terminal | Broker Login")
+        win.geometry("820x700")
+        win.minsize(740, 640)
+        win.configure(background=PALETTE["window"])
+        win.transient(self.master)
         win.grab_set()
         apply_dark_theme(win)
         profiles = load_profiles()
 
-        ttk.Label(win, text="CONNECT TO A BROKER", style="Header.TLabel").pack(anchor="w", padx=18, pady=(16, 3))
-        ttk.Label(win, text="Use the MT5 account login number and exact server name supplied by your broker. Email is optional contact/reference information.").pack(anchor="w", padx=18, pady=(0, 12))
+        hero = tk.Frame(win, bg=PALETTE["panel"], padx=22, pady=18, highlightbackground=PALETTE["border"], highlightthickness=1)
+        hero.pack(fill="x", padx=22, pady=(22, 12))
+        tk.Label(hero, text="DR  /  TRADING TERMINAL", bg=PALETTE["panel"], fg=PALETTE["amber"], font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        tk.Label(hero, text="Connect your MetaTrader 5 account", bg=PALETTE["panel"], fg=PALETTE["text"], font=("Segoe UI", 19, "bold")).pack(anchor="w", pady=(7, 4))
+        tk.Label(hero, text="XAUUSD workspace  •  Demo or Live account  •  Credentials stay on this PC", bg=PALETTE["panel"], fg=PALETTE["muted"]).pack(anchor="w")
+        ttk.Label(win, text="Enter your MT5 login number and exact server name from your broker. Email is optional.").pack(anchor="w", padx=24, pady=(2, 10))
 
-        form = ttk.LabelFrame(win, text="Account credentials", padding=12)
-        form.pack(fill="x", padx=18, pady=5)
+        form = ttk.LabelFrame(win, text="  ACCOUNT DETAILS  ", padding=14)
+        form.pack(fill="x", padx=22, pady=6)
         broker_var, email_var, login_var, password_var, server_var = (tk.StringVar() for _ in range(5))
         save_var = tk.BooleanVar(value=False)
         fields = [
@@ -69,16 +81,16 @@ class ProfessionalTradingFrame(TradingFrame):
             ("MT5 server (exact)", server_var, False),
         ]
         for i, (label, var, secret) in enumerate(fields):
-            ttk.Label(form, text=label).grid(row=i, column=0, sticky="w", pady=4)
-            entry = ttk.Entry(form, textvariable=var, show="•" if secret else "")
-            entry.grid(row=i, column=1, sticky="ew", padx=8, pady=4)
+            ttk.Label(form, text=label).grid(row=i, column=0, sticky="w", pady=6)
+            entry = ttk.Entry(form, textvariable=var, show="●" if secret else "")
+            entry.grid(row=i, column=1, sticky="ew", padx=10, pady=6, ipady=4)
         form.columnconfigure(1, weight=1)
         ttk.Checkbutton(form, text="Save password in Windows Credential Manager (optional)", variable=save_var).grid(row=5, column=1, sticky="w", padx=8, pady=6)
         ttk.Label(form, text="Passwords are never written to the profile file or GitHub.").grid(row=6, column=1, sticky="w", padx=8)
 
-        ttk.Label(win, text="SEARCH SAVED BROKER / ACCOUNT PROFILES", style="Header.TLabel").pack(anchor="w", padx=18, pady=(12, 3))
+        ttk.Label(win, text="SAVED ACCOUNTS  /  SEARCH", style="Header.TLabel").pack(anchor="w", padx=24, pady=(12, 4))
         search_var = tk.StringVar()
-        ttk.Entry(win, textvariable=search_var).pack(fill="x", padx=18)
+        ttk.Entry(win, textvariable=search_var).pack(fill="x", padx=24, ipady=3)
         tree = ttk.Treeview(win, columns=("broker", "email", "login", "server"), show="headings", height=6)
         for col, title, width in (("broker", "Broker", 145), ("email", "Email", 165), ("login", "Account login", 110), ("server", "Server", 260)):
             tree.heading(col, text=title)
@@ -113,9 +125,9 @@ class ProfessionalTradingFrame(TradingFrame):
         refresh_profiles()
 
         status_var = tk.StringVar(value="No account connected through this login form yet.")
-        ttk.Label(win, textvariable=status_var).pack(anchor="w", padx=18, pady=4)
+        ttk.Label(win, textvariable=status_var, wraplength=760).pack(anchor="w", padx=24, pady=5)
         buttons = ttk.Frame(win)
-        buttons.pack(fill="x", padx=18, pady=(4, 16))
+        buttons.pack(fill="x", padx=24, pady=(4, 18))
 
         def connect_account():
             broker = broker_var.get().strip()
@@ -153,8 +165,11 @@ class ProfessionalTradingFrame(TradingFrame):
                 status_var.set(f"Connected: {account.server} / {account.login} ({mode}). " + ("Password saved securely." if password_saved else "Password not saved."))
                 refresh_profiles()
                 self.refresh_market()
-                if messagebox.askyesno("Connected", "MT5 account connected. Close account manager?", parent=win):
-                    win.destroy()
+                self.master.deiconify()
+                self.master.lift()
+                win.grab_release()
+                win.destroy()
+                self.login_window = None
             except Exception as exc:
                 status_var.set("Connection failed.")
                 messagebox.showerror("MT5 login failed", str(exc), parent=win)
@@ -172,9 +187,27 @@ class ProfessionalTradingFrame(TradingFrame):
             refresh_profiles()
             status_var.set("Saved profile and its stored Windows credential were removed.")
 
-        ttk.Button(buttons, text="Connect account", command=connect_account).pack(side="left")
-        ttk.Button(buttons, text="Remove saved profile", command=remove_profile).pack(side="left", padx=8)
-        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="right")
+        def continue_offline():
+            try:
+                win.grab_release()
+            except tk.TclError:
+                pass
+            self.master.deiconify()
+            self.master.lift()
+            win.destroy()
+            self.login_window = None
+
+        win.protocol("WM_DELETE_WINDOW", continue_offline)
+        ttk.Button(buttons, text="CONNECT TO MT5", command=connect_account).pack(side="left", ipadx=14, ipady=4)
+        ttk.Button(buttons, text="Remove saved profile", command=remove_profile).pack(side="left", padx=8, ipady=3)
+        ttk.Button(buttons, text="Continue offline", command=continue_offline).pack(side="right", ipady=3)
+        win.update_idletasks()
+        x = max(0, (win.winfo_screenwidth() - win.winfo_width()) // 2)
+        y = max(0, (win.winfo_screenheight() - win.winfo_height()) // 2)
+        win.geometry(f"+{x}+{y}")
+        win.deiconify()
+        win.lift()
+        win.focus_force()
 
 
     def _add_manual_trading_tab(self):
@@ -613,5 +646,7 @@ class ProfessionalTradingFrame(TradingFrame):
 
 def run_app():
     root = tk.Tk()
-    ProfessionalTradingFrame(root)
+    root.withdraw()
+    app = ProfessionalTradingFrame(root)
+    root.after(250, app.open_account_login)
     root.mainloop()
