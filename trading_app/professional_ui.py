@@ -142,7 +142,7 @@ class ProfessionalTradingFrame(TradingFrame):
                         save_password(broker, login, server, password)
                         password_saved = True
                     except Exception as credential_error:
-                        messagebox.showwarning("Password not saved", str(credential_error) + "\\n\\nThe MT5 session is connected, but the password was not stored.", parent=win)
+                        messagebox.showwarning("Password not saved", str(credential_error) + "\n\nThe MT5 session is connected, but the password was not stored.", parent=win)
                 self.live_armed = False
                 self.mode_var.set("MANUAL • NOT ARMED")
                 mode = "DEMO" if self.mt5.is_demo_account() else "REAL"
