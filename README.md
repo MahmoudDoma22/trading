@@ -46,6 +46,13 @@ Bot configurations are stored in the current Windows user's application data dir
 - Telegram Desktop JSON export import and Bot API polling for authorized new channel posts. Telegram posts remain unverified, require review, and are never automatically sent to the order engine.
 
 
+
+## Broker accounts and secure login
+
+The account manager accepts a broker label, optional email/reference, numeric MT5 account login, password, and the exact MT5 server name. It can connect using the MetaTrader5 Python API, verify the returned account login/server, and keep multiple non-secret account profiles locally under the current Windows user's AppData. Broker profile search filters accounts previously saved on this device; it is not a global internet broker directory. Add a broker manually using the server name provided by that broker. Compatibility requires an MT5-supported broker/server and an installed Windows MT5 terminal.
+
+Passwords are not stored by default. If the user explicitly enables password saving, the app delegates storage to the Windows Credential Manager through the keyring package. Passwords are not written to JSON profiles or GitHub. The optional email field is a contact/reference field; MT5 trading login normally requires the numeric account ID, not the email. Live order mode is reset to disarmed after changing accounts.
+
 ## Signal Hub and external providers
 
 The Signal Hub accepts provider HTTPS RSS/Atom feeds and JSON endpoints. It extracts candidate XAUUSD BUY/SELL messages into a separate review-only list. Feeds must be public or otherwise authorized and use HTTPS; the current adapter has an 8-second timeout and 1 MB response limit. This is a generic feed adapter, not a certified integration with any particular signal vendor. Provider-specific authentication, paid API schemas, webhooks, rate limits, and licensing must be implemented and tested against official provider documentation. Telegram research import/polling remains available separately.
