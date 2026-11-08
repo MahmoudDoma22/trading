@@ -2,3 +2,4 @@ MetaTrader5>=5.0.44; platform_system == "Windows"
 numpy>=1.26
 pandas>=2.2
 matplotlib>=3.8
+pyinstaller>=6.0; platform_system == "Windows"
