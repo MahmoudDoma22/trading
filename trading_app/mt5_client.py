@@ -119,6 +119,26 @@ class MT5Connection:
         self._ensure_connected()
         return mt5.order_calc_margin(order_type, symbol, volume, price)
 
+
+    def _order_send_with_fill_fallback(self, request: dict):
+        """Retry only an explicit INVALID_FILL response; never retry ambiguous outcomes."""
+        modes = []
+        for name in ("ORDER_FILLING_IOC", "ORDER_FILLING_FOK", "ORDER_FILLING_RETURN"):
+            mode = getattr(mt5, name, None)
+            if mode is not None and mode not in modes:
+                modes.append(mode)
+        if not modes:
+            return mt5.order_send(request)
+        last_result = None
+        for mode in modes:
+            request["type_filling"] = mode
+            last_result = mt5.order_send(request)
+            if last_result is not None and last_result.retcode == mt5.TRADE_RETCODE_DONE:
+                return last_result
+            if last_result is None or last_result.retcode != getattr(mt5, "TRADE_RETCODE_INVALID_FILL", -1):
+                return last_result
+        return last_result
+
     def send_approved_order(self, symbol: str, direction: str, volume: float, stop_loss: float, take_profit: float, allow_real: bool = False, comment: str = "Human-approved signal"):
         """Send only after an explicit UI approval; live mode must be separately armed."""
         self._ensure_connected()
@@ -144,7 +164,7 @@ class MT5Connection:
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
-        result = mt5.order_send(request)
+        result = self._order_send_with_fill_fallback(request)
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             raise RuntimeError(f"Order rejected: {getattr(result, 'comment', mt5.last_error())}")
         return result
@@ -174,7 +194,7 @@ class MT5Connection:
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": mt5.ORDER_FILLING_IOC,
             }
-            result = mt5.order_send(request)
+            result = self._order_send_with_fill_fallback(request)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
                 closed.append(int(position.ticket))
             else:
