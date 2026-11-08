@@ -32,6 +32,19 @@ class MT5LoginTests(unittest.TestCase):
             self.assertFalse(client.connect(login=123456, password="runtime-only", server="Demo-Server"))
             fake.shutdown.assert_called()
 
+
+    def test_real_order_is_blocked_without_explicit_live_arm(self):
+        fake = self.make_fake()
+        fake.account_info.return_value = SimpleNamespace(login=123456, server="Demo-Server", trade_mode=2)
+        fake.ACCOUNT_TRADE_MODE_DEMO = 0
+        fake.ACCOUNT_TRADE_MODE_REAL = 2
+        with patch("trading_app.mt5_client.mt5", fake):
+            client = MT5Connection(MqlConfig())
+            client.connected = True
+            with self.assertRaisesRegex(RuntimeError, "explicitly armed"):
+                client.send_approved_order("XAUUSD", "long", 0.01, 2300, 2350, allow_real=False)
+            fake.order_send.assert_not_called()
+
     def test_failed_login_stays_disconnected(self):
         fake = self.make_fake()
         fake.initialize.return_value = False
