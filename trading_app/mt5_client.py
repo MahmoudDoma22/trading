@@ -169,6 +169,52 @@ class MT5Connection:
             raise RuntimeError(f"Order rejected: {getattr(result, 'comment', mt5.last_error())}")
         return result
 
+
+    def get_app_positions(self) -> list:
+        self._ensure_connected()
+        return [p for p in (mt5.positions_get() or ()) if int(getattr(p, "magic", -1)) == APP_MAGIC]
+
+    def close_app_position(self, ticket: int):
+        self._ensure_connected()
+        position = next((p for p in self.get_app_positions() if int(p.ticket) == int(ticket)), None)
+        if position is None:
+            raise RuntimeError("Position not found or it is not tagged as an app-managed trade.")
+        tick = mt5.symbol_info_tick(position.symbol)
+        if tick is None:
+            raise RuntimeError("No current quote is available for this position.")
+        close_buy = position.type == mt5.POSITION_TYPE_SELL
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL, "symbol": position.symbol,
+            "position": position.ticket, "volume": position.volume,
+            "type": mt5.ORDER_TYPE_BUY if close_buy else mt5.ORDER_TYPE_SELL,
+            "price": tick.ask if close_buy else tick.bid, "deviation": 50,
+            "magic": APP_MAGIC, "comment": "Manual close from DR Terminal",
+            "type_time": mt5.ORDER_TIME_GTC, "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = self._order_send_with_fill_fallback(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise RuntimeError(f"Position close rejected: {getattr(result, 'comment', mt5.last_error())}")
+        return result
+
+    def modify_app_position(self, ticket: int, stop_loss: float, take_profit: float):
+        self._ensure_connected()
+        position = next((p for p in self.get_app_positions() if int(p.ticket) == int(ticket)), None)
+        if position is None:
+            raise RuntimeError("Position not found or it is not tagged as an app-managed trade.")
+        info = mt5.symbol_info(position.symbol)
+        if info is None:
+            raise RuntimeError("Symbol specification is unavailable.")
+        sl = round(float(stop_loss), info.digits) if stop_loss else 0.0
+        tp = round(float(take_profit), info.digits) if take_profit else 0.0
+        if sl <= 0 or tp <= 0:
+            raise ValueError("Both a positive Stop Loss and Take Profit are required.")
+        request = {"action": mt5.TRADE_ACTION_SLTP, "position": position.ticket,
+                   "symbol": position.symbol, "sl": sl, "tp": tp, "magic": APP_MAGIC}
+        result = mt5.order_send(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            raise RuntimeError(f"Stop/target modification rejected: {getattr(result, 'comment', mt5.last_error())}")
+        return result
+
     def emergency_stop_app_trades(self) -> dict:
         """Cancel this app's pending orders and close its own positions; leaves unrelated positions untouched."""
         self._ensure_connected()
