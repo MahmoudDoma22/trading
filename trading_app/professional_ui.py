@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox
 from .ui import TradingFrame
 from .theme import PALETTE, apply_dark_theme
 from .signal_sources import fetch_signal_feed
+from .account_profiles import load_profiles, save_profiles, save_password, get_password
 
 
 PALETTE = {
@@ -31,6 +32,8 @@ class ProfessionalTradingFrame(TradingFrame):
         super()._build_ui()
         self.configure(background=PALETTE["window"])
         self._configure_dark_styles()
+        header = self.winfo_children()[0]
+        ttk.Button(header, text='Login / Accounts', command=self.open_account_login).pack(side='left', padx=6)
         self._add_market_cards()
         self._add_order_ticket()
         self._add_real_money_warning()
@@ -39,6 +42,129 @@ class ProfessionalTradingFrame(TradingFrame):
         self._add_signal_hub()
         apply_dark_theme(self)
 
+
+
+    def open_account_login(self):
+        win = tk.Toplevel(self)
+        win.title("Broker & MT5 account login")
+        win.geometry("720x620")
+        win.transient(self)
+        win.grab_set()
+        apply_dark_theme(win)
+        profiles = load_profiles()
+
+        ttk.Label(win, text="CONNECT TO A BROKER", style="Header.TLabel").pack(anchor="w", padx=18, pady=(16, 3))
+        ttk.Label(win, text="Use the MT5 account login number and exact server name supplied by your broker. Email is optional contact/reference information.").pack(anchor="w", padx=18, pady=(0, 12))
+
+        form = ttk.LabelFrame(win, text="Account credentials", padding=12)
+        form.pack(fill="x", padx=18, pady=5)
+        broker_var, email_var, login_var, password_var, server_var = (tk.StringVar() for _ in range(5))
+        save_var = tk.BooleanVar(value=False)
+        fields = [
+            ("Broker name", broker_var, False),
+            ("Email (optional)", email_var, False),
+            ("MT5 account login / ID", login_var, False),
+            ("Password", password_var, True),
+            ("MT5 server (exact)", server_var, False),
+        ]
+        for i, (label, var, secret) in enumerate(fields):
+            ttk.Label(form, text=label).grid(row=i, column=0, sticky="w", pady=4)
+            entry = ttk.Entry(form, textvariable=var, show="•" if secret else "")
+            entry.grid(row=i, column=1, sticky="ew", padx=8, pady=4)
+        form.columnconfigure(1, weight=1)
+        ttk.Checkbutton(form, text="Save password in Windows Credential Manager (optional)", variable=save_var).grid(row=5, column=1, sticky="w", padx=8, pady=6)
+        ttk.Label(form, text="Passwords are never written to the profile file or GitHub.").grid(row=6, column=1, sticky="w", padx=8)
+
+        ttk.Label(win, text="SEARCH SAVED BROKER PROFILES", style="Header.TLabel").pack(anchor="w", padx=18, pady=(12, 3))
+        search_var = tk.StringVar()
+        ttk.Entry(win, textvariable=search_var).pack(fill="x", padx=18)
+        tree = ttk.Treeview(win, columns=("broker", "login", "server"), show="headings", height=6)
+        for col, title, width in (("broker", "Broker", 180), ("login", "Account login", 130), ("server", "Server", 300)):
+            tree.heading(col, text=title)
+            tree.column(col, width=width, anchor="w")
+        tree.pack(fill="both", expand=True, padx=18, pady=8)
+
+        def refresh_profiles(*_):
+            for iid in tree.get_children():
+                tree.delete(iid)
+            term = search_var.get().strip().casefold()
+            for idx, profile in enumerate(profiles):
+                haystack = " ".join(str(profile.get(k, "")) for k in ("broker", "login", "server")).casefold()
+                if not term or term in haystack:
+                    tree.insert("", "end", iid=str(idx), values=(profile["broker"], profile["login"], profile["server"]))
+
+        def choose_profile(_event=None):
+            selected = tree.selection()
+            if not selected:
+                return
+            p = profiles[int(selected[0])]
+            broker_var.set(p["broker"])
+            login_var.set(p["login"])
+            server_var.set(p["server"])
+            saved = get_password(p["broker"], p["login"], p["server"])
+            if saved:
+                password_var.set(saved)
+                save_var.set(True)
+
+        tree.bind("<<TreeviewSelect>>", choose_profile)
+        search_var.trace_add("write", refresh_profiles)
+        refresh_profiles()
+
+        status_var = tk.StringVar(value="No account connected through this login form yet.")
+        ttk.Label(win, textvariable=status_var).pack(anchor="w", padx=18, pady=4)
+        buttons = ttk.Frame(win)
+        buttons.pack(fill="x", padx=18, pady=(4, 16))
+
+        def connect_account():
+            broker = broker_var.get().strip()
+            login = login_var.get().strip()
+            password = password_var.get()
+            server = server_var.get().strip()
+            if not broker or not login.isdigit() or not password or not server:
+                messagebox.showwarning("Missing details", "Enter broker, numeric MT5 account login, password and exact server.", parent=win)
+                return
+            try:
+                status_var.set("Connecting to MetaTrader 5…")
+                win.update_idletasks()
+                if not self.mt5.connect(login=int(login), password=password, server=server):
+                    raise RuntimeError("MT5 login failed. Check account number, password, server and terminal installation.")
+                account = self.mt5.get_account_info()
+                if int(account.login) != int(login) or account.server != server:
+                    self.mt5.disconnect()
+                    raise RuntimeError("Connected MT5 account does not match the selected login/server.")
+                profile = {"broker": broker, "login": login, "server": server}
+                profiles[:] = [p for p in profiles if (p.get("broker"), p.get("login"), p.get("server")) != (broker, login, server)]
+                profiles.append(profile)
+                save_profiles(profiles)
+                if save_var.get():
+                    save_password(broker, login, server, password)
+                self.live_armed = False
+                self.mode_var.set("MANUAL • NOT ARMED")
+                mode = "DEMO" if self.mt5.is_demo_account() else "REAL"
+                self.connection_var.set(f"Connected | {mode} | {account.server} | {account.login}")
+                self._log(f"Connected to selected MT5 broker/account {account.login} ({mode}).")
+                status_var.set(f"Connected successfully: {account.server} / {account.login} ({mode}).")
+                refresh_profiles()
+                self.refresh_market()
+                if messagebox.askyesno("Connected", "MT5 account connected. Close account manager?", parent=win):
+                    win.destroy()
+            except Exception as exc:
+                status_var.set("Connection failed.")
+                messagebox.showerror("MT5 login failed", str(exc), parent=win)
+
+        def remove_profile():
+            selected = tree.selection()
+            if not selected:
+                return
+            p = profiles[int(selected[0])]
+            profiles.remove(p)
+            save_profiles(profiles)
+            refresh_profiles()
+            status_var.set("Saved profile removed. Stored Windows credential, if any, is unchanged.")
+
+        ttk.Button(buttons, text="Connect account", command=connect_account).pack(side="left")
+        ttk.Button(buttons, text="Remove saved profile", command=remove_profile).pack(side="left", padx=8)
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="right")
 
     def _add_signal_hub(self):
         from .signal_source_settings import load_signal_sources, save_signal_sources
