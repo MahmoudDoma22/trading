@@ -28,7 +28,9 @@ jobs:
       - name: Compile Python modules
         shell: pwsh
         run: |
-          python -m compileall -q main.py trading_app
+          python -m compileall -q main.py trading_app tests
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
       - name: Build standalone application
         run: pyinstaller --noconfirm --clean --onefile --windowed --name DRTradingTerminal --collect-all MetaTrader5 main.py
       - name: Install Inno Setup
