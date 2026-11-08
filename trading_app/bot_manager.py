@@ -185,11 +185,15 @@ class BotManager:
         return len(incoming)
 
     def evaluate(self, symbol: str, candles_by_tf: dict, bot: BotDefinition) -> dict:
-        signal = self.engine.generate_signal("XAUUSD", candles_by_tf, {
+        if not str(symbol).upper().startswith("XAUUSD"):
+            raise ValueError("This application is configured for XAUUSD only.")
+        selected_timeframes = bot.settings.get("timeframes") or [bot.default_timeframe]
+        selected_data = {tf: candles_by_tf[tf] for tf in selected_timeframes if tf in candles_by_tf}
+        signal = self.engine.generate_signal(symbol, selected_data, {
             "min_confidence": bot.min_confidence,
             "stop_atr_multiplier": bot.settings.get("stop_atr_multiplier", 1.5),
         })
-        signal.update({"symbol": "XAUUSD", "bot_name": bot.name, "description": bot.description,
+        signal.update({"symbol": symbol, "bot_name": bot.name, "description": bot.description,
                       "max_risk_usd": min(bot.max_risk_usd, 5.0),
                       "max_trade_size_lots": bot.max_trade_size_lots,
                       "strategy_timeframes": bot.settings.get("timeframes", [])})
