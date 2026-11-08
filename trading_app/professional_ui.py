@@ -242,7 +242,7 @@ class ProfessionalTradingFrame(TradingFrame):
             if not sizing["ok"]:
                 raise RuntimeError(sizing["reason"])
             real = self.mt5.is_real_account()
-            warning = f"{direction.upper()} {symbol} at current quote {entry:.{info.digits}f}\\nVolume: {sizing['volume']} lots\\nSL: {stop}\\nTP: {target}\\nEstimated buffered risk: USD {sizing['buffered_loss']:.2f} (cap USD {sizing['risk_cap']:.2f})\\n\\nActual loss may exceed this estimate. " + ("REAL MONEY ORDER." if real else "Demo account order.")
+            warning = f"{direction.upper()} {symbol} at current quote {entry:.{info.digits}f}\nVolume: {sizing['volume']} lots\nSL: {stop}\nTP: {target}\nEstimated buffered risk: USD {sizing['buffered_loss']:.2f} (cap USD {sizing['risk_cap']:.2f})\n\nActual loss may exceed this estimate. " + ("REAL MONEY ORDER." if real else "Demo account order.")
             if not messagebox.askyesno("Confirm manual order", warning, icon="warning"):
                 return
             result = self.mt5.send_approved_order(symbol, direction, sizing["volume"], round(stop, info.digits), round(target, info.digits), allow_real=bool(real and self.live_armed), comment="Manual ticket")
@@ -302,7 +302,7 @@ class ProfessionalTradingFrame(TradingFrame):
         ticket = int(selected[0])
         try:
             sl, tp = float(self.position_sl_var.get()), float(self.position_tp_var.get())
-            if not messagebox.askyesno("Confirm SL / TP change", f"Modify position #{ticket}?\\nNew SL: {sl}\\nNew TP: {tp}", icon="warning"):
+            if not messagebox.askyesno("Confirm SL / TP change", f"Modify position #{ticket}?\nNew SL: {sl}\nNew TP: {tp}", icon="warning"):
                 return
             self.mt5.modify_app_position(ticket, sl, tp)
             self.manual_status.set(f"Stop Loss / Take Profit updated for #{ticket}.")
@@ -436,7 +436,7 @@ class ProfessionalTradingFrame(TradingFrame):
                 "UNVERIFIED • REVIEW ONLY"))
         self.feed_status.set(str(len(items)) + " candidate(s) received. None are validated or executable.")
         if errors:
-            messagebox.showwarning("Some providers failed", "\\n".join(errors), parent=self)
+            messagebox.showwarning("Some providers failed", "\n".join(errors), parent=self)
         elif not items:
             self.feed_status.set("Feeds checked; no recognizable XAUUSD BUY/SELL candidates found.")
 
