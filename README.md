@@ -52,6 +52,10 @@ The Signal Hub accepts provider HTTPS RSS/Atom feeds and JSON endpoints. It extr
 
 External messages are unverified and never routed to the order queue or execution engine. Verify provider identity, timestamp, symbol, price, stop, target, and market conditions independently. Do not paste provider passwords, API secrets, or account credentials into the feed URL.
 
+
+
+Provider configuration is deliberately independent and optional. Add, edit, enable/disable, or remove providers later from the Signal Hub settings panel; the list is stored locally under the current Windows user's AppData (not in the repository). No provider account passwords or API secrets are stored by this settings module. The app can be used without configuring any external provider.
+
 ## Appearance
 
 The app applies a shared dark palette to ttk controls, classic Tk text/entry widgets, tables, and the Bot Manager dialog. The Market tab includes compact instrument/signal/score/quote cards, and charts use a matching dark canvas.
