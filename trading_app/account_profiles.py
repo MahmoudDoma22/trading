@@ -28,13 +28,14 @@ def save_profiles(profiles: list[dict]) -> None:
         broker = str(item.get("broker", "")).strip()[:100]
         login = str(item.get("login", "")).strip()
         server = str(item.get("server", "")).strip()[:160]
+        email = str(item.get("email", "")).strip()[:160]
         if not broker or not login.isdigit() or not server:
             continue
         key = (broker.casefold(), login, server.casefold())
         if key in seen:
             continue
         seen.add(key)
-        clean.append({"broker": broker, "login": login, "server": server})
+        clean.append({"broker": broker, "email": email, "login": login, "server": server})
     path = profiles_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
