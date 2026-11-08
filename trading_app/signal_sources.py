@@ -13,7 +13,7 @@ def _candidate(text: str, source: str, published: str = "") -> dict | None:
       "direction":"long" if side.group(1) in ("BUY","LONG") else "short",
       "entry":number(r"\b(?:ENTRY|ENTER|AT)\s*[:=@-]?\s*(\d+(?:\.\d+)?)"),
       "stop":number(r"\b(?:SL|STOP(?:\s*LOSS)?)\s*[:=@-]?\s*(\d+(?:\.\d+)?)"),
-      "target":number(r"\b(?:TP\s*\d*|TARGET)\s*[:=@-]?\s*(\d+(?:\.\d+)?)"),
+      "target":number(r"\bTP\s*[:=@-]\s*(\d+(?:\.\d+)?)") or number(r"\bTP\s+(\d+(?:\.\d+)?)") or number(r"\bTARGET\s*[:=@-]?\s*(\d+(?:\.\d+)?)"),
       "raw_text":text[:4000],"status":"UNVERIFIED • REVIEW ONLY","review_required":True}
 
 def parse_signal_payload(payload, source: str) -> list[dict]:
