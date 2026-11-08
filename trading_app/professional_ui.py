@@ -78,8 +78,8 @@ class ProfessionalTradingFrame(TradingFrame):
         ttk.Label(win, text="SEARCH SAVED BROKER / ACCOUNT PROFILES", style="Header.TLabel").pack(anchor="w", padx=18, pady=(12, 3))
         search_var = tk.StringVar()
         ttk.Entry(win, textvariable=search_var).pack(fill="x", padx=18)
-        tree = ttk.Treeview(win, columns=("broker", "login", "server"), show="headings", height=6)
-        for col, title, width in (("broker", "Broker", 180), ("login", "Account login", 130), ("server", "Server", 300)):
+        tree = ttk.Treeview(win, columns=("broker", "email", "login", "server"), show="headings", height=6)
+        for col, title, width in (("broker", "Broker", 145), ("email", "Email", 165), ("login", "Account login", 110), ("server", "Server", 260)):
             tree.heading(col, text=title)
             tree.column(col, width=width, anchor="w")
         tree.pack(fill="both", expand=True, padx=18, pady=8)
@@ -89,9 +89,9 @@ class ProfessionalTradingFrame(TradingFrame):
                 tree.delete(iid)
             term = search_var.get().strip().casefold()
             for idx, profile in enumerate(profiles):
-                haystack = " ".join(str(profile.get(k, "")) for k in ("broker", "login", "server")).casefold()
+                haystack = " ".join(str(profile.get(k, "")) for k in ("broker", "email", "login", "server")).casefold()
                 if not term or term in haystack:
-                    tree.insert("", "end", iid=str(idx), values=(profile["broker"], profile["login"], profile["server"]))
+                    tree.insert("", "end", iid=str(idx), values=(profile["broker"], profile.get("email", ""), profile["login"], profile["server"]))
 
         def choose_profile(_event=None):
             selected = tree.selection()
@@ -99,6 +99,7 @@ class ProfessionalTradingFrame(TradingFrame):
                 return
             p = profiles[int(selected[0])]
             broker_var.set(p["broker"])
+            email_var.set(p.get("email", ""))
             login_var.set(p["login"])
             server_var.set(p["server"])
             saved = get_password(p["broker"], p["login"], p["server"])
@@ -132,7 +133,7 @@ class ProfessionalTradingFrame(TradingFrame):
                 if int(account.login) != int(login) or account.server != server:
                     self.mt5.disconnect()
                     raise RuntimeError("Connected MT5 account does not match the selected login/server.")
-                profile = {"broker": broker, "login": login, "server": server}
+                profile = {"broker": broker, "email": email_var.get().strip(), "login": login, "server": server}
                 profiles[:] = [p for p in profiles if (p.get("broker"), p.get("login"), p.get("server")) != (broker, login, server)]
                 profiles.append(profile)
                 save_profiles(profiles)
