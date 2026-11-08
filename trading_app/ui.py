@@ -10,6 +10,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from .backtest import Backtester
+from .bot_manager_dialog import BotManagerDialog
 from .bot_manager import BotManager
 from .config import MqlConfig
 from .mt5_client import MT5Connection
@@ -19,7 +20,7 @@ from .strategy_journal import StrategyJournal
 from .telegram_ingest import CHANNEL_LINK, parse_telegram_export, poll_authorized_channel_updates
 
 logger = logging.getLogger(__name__)
-SYMBOL_PRESETS = ("XAUUSD", "XAGUSD", "EURUSD", "GBPUSD")
+SYMBOL_PRESETS = ("XAUUSD",)
 
 
 class TradingFrame(tk.Frame):
@@ -57,6 +58,7 @@ class TradingFrame(tk.Frame):
         ttk.Label(header, text="DR TERMINAL  |  Research / execution", style="Header.TLabel").pack(side="left", padx=5)
         ttk.Button(header, text="Connect MT5", command=self.connect_mt5).pack(side="left", padx=8)
         ttk.Button(header, text="Refresh", command=self.refresh_market).pack(side="left", padx=4)
+        ttk.Button(header, text="Manage bots", command=self.open_bot_manager).pack(side="left", padx=4)
         self.connection_var = tk.StringVar(value="Disconnected")
         ttk.Label(header, textvariable=self.connection_var).pack(side="left", padx=10)
         ttk.Button(header, text="Enable REAL orders…", command=self.enable_live).pack(side="right", padx=5)
@@ -117,6 +119,7 @@ class TradingFrame(tk.Frame):
         for bot in self.bot_manager.get_bots():
             self.bot_tree.insert("", "end", text=bot.name)
         self.bot_tree.bind("<<TreeviewSelect>>", self.on_bot_selected)
+        ttk.Button(left, text="Load / manage bots…", command=self.open_bot_manager).pack(fill="x", pady=5)
         right = ttk.Frame(parent, padding=8)
         right.pack(side="left", fill="both", expand=True)
         editor = ttk.LabelFrame(right, text="Selected bot configuration", padding=8)
@@ -202,9 +205,25 @@ class TradingFrame(tk.Frame):
         if hasattr(self, "log"):
             self.log.insert("end", f"{time.strftime('%H:%M:%S')}  {text}\n"); self.log.see("end")
 
+    def open_bot_manager(self):
+        BotManagerDialog(self, self.bot_manager, on_change=self._on_bot_library_changed)
+
+    def _on_bot_library_changed(self, preferred_name=None):
+        for iid in self.bot_tree.get_children():
+            self.bot_tree.delete(iid)
+        for bot in self.bot_manager.get_bots():
+            label = bot.name if self.bot_manager.is_enabled(bot) else f"{bot.name} [DISABLED]"
+            self.bot_tree.insert("", "end", text=label)
+        if preferred_name:
+            for iid in self.bot_tree.get_children():
+                if self.bot_tree.item(iid, "text").replace(" [DISABLED]", "") == preferred_name:
+                    self.bot_tree.selection_set(iid)
+                    self.on_bot_selected(None)
+                    break
+
     def _selected_bot(self):
         selection = self.bot_tree.selection()
-        name = self.bot_tree.item(selection[0], "text") if selection else None
+        name = self.bot_tree.item(selection[0], "text").replace(" [DISABLED]", "") if selection else None
         return next((b for b in self.bot_manager.get_bots() if b.name == name), None)
 
     def _select_first_bot(self):
@@ -268,6 +287,9 @@ class TradingFrame(tk.Frame):
             self.signal_var.set("No feed. Connect to MT5; sample prices are not used."); return
         bot = self._selected_bot()
         if not bot: return
+        if not self.bot_manager.is_enabled(bot):
+            self.signal_var.set(f"{bot.name} is disabled. Enable it in Manage bots to resume analysis.")
+            return
         try:
             symbol, data = self.mt5.get_market_data(self.symbol_var.get(), TIMEFRAMES, self.config.candle_count)
             self.market_data = data
