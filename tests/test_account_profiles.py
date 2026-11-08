@@ -15,7 +15,7 @@ class BrokerProfileTests(unittest.TestCase):
                     {"broker": "Invalid", "login": "not-numeric", "server": "Server"},
                 ])
                 rows = load_profiles()
-                self.assertEqual(rows, [{"broker": "Example Broker", "login": "123456", "server": "Example-Demo"}])
+                self.assertEqual(rows, [{"broker": "Example Broker", "email": "", "login": "123456", "server": "Example-Demo"}])
                 self.assertNotIn("password", rows[0])
 
     def test_profiles_default_to_empty(self):
