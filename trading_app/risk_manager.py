@@ -10,10 +10,12 @@ class RiskManager:
         self.mt5 = mt5_connection
         self.hard_cap = min(float(hard_cap), 5.0)
 
-    def size_position(self, symbol: str, direction: str, entry: float, stop_loss: float, requested_lots: float, bot_max_lots: float) -> dict:
+    def size_position(self, symbol: str, direction: str, entry: float, stop_loss: float, requested_lots: float, bot_max_lots: float, bot_risk_cap: float | None = None) -> dict:
         if direction not in ("long", "short") or entry <= 0 or stop_loss <= 0 or requested_lots <= 0:
             return {"ok": False, "reason": "Invalid direction, price, stop, or requested lot size."}
-        cap = min(self.hard_cap, float(requested_lots) and self.hard_cap)
+        cap = min(self.hard_cap, float(bot_risk_cap)) if bot_risk_cap is not None else self.hard_cap
+        if cap <= 0:
+            return {"ok": False, "reason": "Per-bot risk cap must be positive."}
         info = self.mt5.get_symbol_info(symbol)
         account = self.mt5.get_account_info()
         tick = self.mt5.get_tick(symbol)
@@ -48,4 +50,4 @@ class RiskManager:
                 "margin_estimate": float(margin),
                 "warning": "Loss estimate excludes unpredictable gaps/slippage; the $5 cap cannot guarantee a maximum realized loss.",
             }
-        return {"ok": False, "reason": "No broker-valid volume fits the $5 risk and free-margin guards."}
+        return {"ok": False, "reason": "No broker-valid volume fits the configured risk and free-margin guards."}
