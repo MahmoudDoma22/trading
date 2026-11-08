@@ -136,14 +136,19 @@ class ProfessionalTradingFrame(TradingFrame):
                 profiles[:] = [p for p in profiles if (p.get("broker"), p.get("login"), p.get("server")) != (broker, login, server)]
                 profiles.append(profile)
                 save_profiles(profiles)
+                password_saved = False
                 if save_var.get():
-                    save_password(broker, login, server, password)
+                    try:
+                        save_password(broker, login, server, password)
+                        password_saved = True
+                    except Exception as credential_error:
+                        messagebox.showwarning("Password not saved", str(credential_error) + "\\n\\nThe MT5 session is connected, but the password was not stored.", parent=win)
                 self.live_armed = False
                 self.mode_var.set("MANUAL • NOT ARMED")
                 mode = "DEMO" if self.mt5.is_demo_account() else "REAL"
                 self.connection_var.set(f"Connected | {mode} | {account.server} | {account.login}")
                 self._log(f"Connected to selected MT5 broker/account {account.login} ({mode}).")
-                status_var.set(f"Connected successfully: {account.server} / {account.login} ({mode}).")
+                status_var.set(f"Connected: {account.server} / {account.login} ({mode}). " + ("Password saved securely." if password_saved else "Password not saved."))
                 refresh_profiles()
                 self.refresh_market()
                 if messagebox.askyesno("Connected", "MT5 account connected. Close account manager?", parent=win):
