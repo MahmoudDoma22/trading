@@ -47,6 +47,11 @@ Bot configurations are stored in the current Windows user's application data dir
 
 
 
+
+## Manual trading and position management
+
+The Manual Trading tab provides XAUUSD Buy/Sell tickets with a fresh MT5 quote, explicit SL/TP, position sizing through the configured USD 5 estimated-risk ceiling, and a confirmation prompt before sending. It lists only positions carrying this application's magic tag; Close and Modify SL/TP actions require a selected app-managed position and a further confirmation. Unrelated positions opened outside the application are intentionally excluded. Live orders remain disabled until the user arms manual live approvals, and no live automatic execution is implemented. Broker fills, slippage, gaps and execution rules can still produce losses above estimates.
+
 ## Broker accounts and secure login
 
 The account manager accepts a broker label, optional email/reference, numeric MT5 account login, password, and the exact MT5 server name. It can connect using the MetaTrader5 Python API, verify the returned account login/server, and keep multiple non-secret account profiles locally under the current Windows user's AppData. Broker profile search filters accounts previously saved on this device; it is not a global internet broker directory. Add a broker manually using the server name provided by that broker. Compatibility requires an MT5-supported broker/server and an installed Windows MT5 terminal.
