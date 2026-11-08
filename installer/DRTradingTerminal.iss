@@ -4,7 +4,7 @@
 #define AppExeName "DRTradingTerminal.exe"
 
 [Setup]
-AppId={{A73E45B8-13F6-4A68-9E3B-DRTRADING0001}
+AppId={{A73E45B8-13F6-4A68-9E3B-000000000001}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
