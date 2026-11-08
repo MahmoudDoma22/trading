@@ -73,7 +73,10 @@ class BotManager:
             raise ValueError("ATR stop multiplier must be between 0.1 and 10.")
         settings = dict(data.get("settings") or {})
         settings["stop_atr_multiplier"] = multiplier
-        settings["timeframes"] = [tf for tf in settings.get("timeframes", [timeframe]) if tf in allowed]
+        timeframes = [str(tf).upper() for tf in settings.get("timeframes", [timeframe])]
+        if not timeframes or any(tf not in allowed for tf in timeframes):
+            raise ValueError("Bot analysis timeframes must be chosen from M1, M5, M15, H1, H4, D1.")
+        settings["timeframes"] = list(dict.fromkeys(timeframes))
         settings["enabled"] = bool(settings.get("enabled", True))
         return BotDefinition(name=name, description=str(data.get("description", ""))[:500],
             instrument="XAUUSD", trade_direction=str(data.get("trade_direction", "both")),
